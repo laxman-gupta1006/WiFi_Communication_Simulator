@@ -17,9 +17,9 @@ int main() {
 
         struct Result {
             int users;
-            double wifi4Throughput, wifi5Throughput, wifi6Throughput;
-            double wifi4AvgLatency, wifi5AvgLatency, wifi6AvgLatency;
-            double wifi4MaxLatency, wifi5MaxLatency, wifi6MaxLatency;
+            long double wifi4Throughput, wifi5Throughput, wifi6Throughput;
+            long double wifi4AvgLatency, wifi5AvgLatency, wifi6AvgLatency;
+            long double wifi4MaxLatency, wifi5MaxLatency, wifi6MaxLatency;
         };
 
         std::vector<Result> results;

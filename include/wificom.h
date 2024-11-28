@@ -46,15 +46,29 @@ public:
 
     virtual std::unique_ptr<Packet> createPacket() = 0;
     virtual bool canTransmit() = 0;
-
     int getId() const;
     virtual ~User() = default;
 };
 
+class Channel {
+public:
+    Channel();
+    bool isBusy() const;
+    bool tryAcquire();
+    void release();
+    void waitUntilFree();
+
+private:
+    mutable std::mutex mutex;
+    bool busy;
+};
+
+
 // WiFi4User
 class WiFi4User : public User {
 private:
-    int backoffTime;
+    double backoffTime;
+    double TransmissionTime;
     const int MAX_BACKOFF;
 
 public:
@@ -62,16 +76,19 @@ public:
 
     std::unique_ptr<Packet> createPacket() override;
     bool canTransmit() override;
+    double getBackoffTime(); // Getter for backoff time
+    void setBackoffTime();
+    double getTransmissionTime();
+    void setTransmissionTime();
 };
 
 // WiFi5User
-class WiFi5User : public User {
+class WiFi5User : public WiFi4User {
 private:
     bool hasChannelState;
 
 public:
-    WiFi5User(int userId);
-
+    WiFi5User(int userId);  // Declare the constructor here
     std::unique_ptr<Packet> createPacket() override;
     bool canTransmit() override;
     void setChannelState(bool state);
@@ -84,12 +101,6 @@ public:
 
     std::unique_ptr<Packet> createPacket() override;
     bool canTransmit() override;
-};
-
-// Data Analyzer
-class DataAnalyzer {
-public:
-    static void analyzeBitDistribution(const std::vector<std::unique_ptr<Packet>>& packets);
 };
 
 // Access Point Base Class
@@ -128,6 +139,7 @@ public:
     void simulateTransmission() override;
     double computeThroughput() override;
     std::pair<double, double> computeLatency() override;
+    void addUser(std::unique_ptr<WiFi4User> user) { users.push_back(std::move(user)); }  
 };
 
 // WiFi5AccessPoint

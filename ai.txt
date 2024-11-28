@@ -1,0 +1,4 @@
+WiFi4 Unrealistic Latency:
+
+CSMA/CA in WiFi4 inherently introduces contention and backoff delays, leading to higher average and maximum latencies than shown (e.g., 0.0002 ms).
+Verify whether backoff times and collisions are simulated accurately in WiFi4.
