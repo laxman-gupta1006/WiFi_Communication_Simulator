@@ -1,6 +1,9 @@
 #ifndef USER_H
 #define USER_H
 
+#include <memory>
+#include <random>
+#include "./packet.h"
 class User {
 protected:
     int id;

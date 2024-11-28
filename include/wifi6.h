@@ -2,7 +2,7 @@
 #define WIFI_6_H
 
 #include "./ap.h"
-#include "./channel.h"
+// #include "./channel.h"
 #include "./packet.h"
 #include "./user.h"
 #include "./wifi5.h"

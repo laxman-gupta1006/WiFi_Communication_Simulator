@@ -2,10 +2,11 @@
 #define WIFI_5_H
 
 #include "./ap.h"
-#include "./channel.h"
+// #include "./channel.h"
 #include "./packet.h"
 #include "./user.h"
 #include "./wifi4.h"
+
 
 class WiFi5User : public WiFi4User {
 private:

@@ -1,7 +1,23 @@
-#include "./include/wificom.h"
+
+
 #include <iostream>
 #include <vector>
 #include <iomanip>
+#include <iostream>
+#include <thread>
+#include <mutex>
+#include <numeric>
+#include <chrono>
+#include <iomanip>
+
+#include "../include/ap.h"
+// #include "channel.h"
+#include "../include/packet.h"
+#include "../include/user.h"
+#include "../include/wifi4.h"
+#include "../include/wifi5.h"
+#include "../include/wifi6.h"
+
 
 void printAccessPointInfo(AccessPoint* ap) {
     std::cout << "\nAccess Point Details:\n";

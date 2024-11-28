@@ -1,6 +1,13 @@
-#ifndef WIFI_SIMULATION_H
-#define WIFI_SIMULATION_H
+#ifndef ACCESS_POINT_H
+#define ACCESS_POINT_H
 
+#include <vector>
+#include <memory>
+#include <mutex>
+#include <utility>
+
+#include "./user.h"
+#include "./packet.h"
 class AccessPoint {
 protected:
     int id;
@@ -17,6 +24,7 @@ public:
     virtual void simulateTransmission() = 0;
     virtual double computeThroughput() = 0;
     virtual std::pair<double, double> computeLatency() = 0;
+    int getBandwidth()const;
 
     const std::vector<std::unique_ptr<Packet>>& getTransmittedPackets() const;
     int getId() const;

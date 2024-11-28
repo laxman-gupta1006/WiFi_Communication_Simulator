@@ -1,32 +1,33 @@
-# Simple Makefile for WiFi Simulation
+# Compiler and flags
+CXX := g++
+CXXFLAGS := -std=c++17 -Wall -Wextra -Iinclude -pthread
 
-# Compiler
-CXX = g++
-CXXFLAGS = -std=c++17 -Wall -O2 -I./include -lpthread
+# Directories
+SRC_DIR := src
+INC_DIR := include
+BUILD_DIR := build
 
-# Executable name
-TARGET = wifi_simulation
+# Source and object files
+SRC_FILES := $(wildcard $(SRC_DIR)/*.cpp)
+OBJ_FILES := $(patsubst $(SRC_DIR)/%.cpp, $(BUILD_DIR)/%.o, $(SRC_FILES))
 
-# Source files
-SOURCES = src/wificom.cpp main.cpp
-
-# Object files
-OBJECTS = $(SOURCES:.cpp=.o)
+# Output binary
+TARGET := $(BUILD_DIR)/OOPD_Project.exe
 
 # Default target
 all: $(TARGET)
 
-# Linking
-$(TARGET): $(OBJECTS)
-	$(CXX) $(CXXFLAGS) -o $@ $^
+# Build the target
+$(TARGET): $(OBJ_FILES)
+	$(CXX) $(CXXFLAGS) $^ -o $@
 
-# Compiling
-%.o: %.cpp include/wificom.h
+# Build object files
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Clean up
+# Clean build artifacts
 clean:
-	rm -f $(OBJECTS) $(TARGET)
+	@if exist $(BUILD_DIR) rmdir /s /q $(BUILD_DIR)
 
 # Phony targets
 .PHONY: all clean

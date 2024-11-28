@@ -1,11 +1,17 @@
 #ifndef WIFI_4_H
 #define WIFI_4_H
-
+#include <iostream>
+#include <vector>
+#include <memory>
+#include <random>
+#include <chrono>
+#include <algorithm>
+#include <iomanip>
+#include <mutex> // Channel synchronization
 #include "./ap.h"
-#include "./channel.h"
+// #include "./channel.h"
 #include "./packet.h"
 #include "./user.h"
-
 
 class WiFi4User : public User {
 private:
