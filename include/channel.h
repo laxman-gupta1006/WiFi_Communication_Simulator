@@ -15,4 +15,4 @@ private:
     bool busy;
 };
 
-#endif // WIFI_SIMULATION_H
+#endif // CHANNEL_H

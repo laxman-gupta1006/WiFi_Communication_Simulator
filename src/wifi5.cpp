@@ -1,80 +1,142 @@
 #include "../include/wifi5.h"
 #include <numeric>
+#include <thread>
+#include <vector>
+#include <iostream>
+#include <chrono>
+#include <mutex>
+#include <algorithm>
+#include "../include/channel.h"
 
-#include <thread>   // For std::thread
-#include <vector>   // For std::vector
-#include <numeric>  // If you need std::accumulate (already included)
-#include <chrono>   // For std::chrono::microseconds (if used)
-#include <iostream> // Optional for debugging
+constexpr double PARALLEL_TIME_MS=15.0;
+constexpr double CSI_PACKET_SIZE_BYTES=200.0;
 
-constexpr double PARALLEL_TIME_MS = 5.0; 
-
-WiFi5User::WiFi5User(int userId) : WiFi4User(userId), hasChannelState(false) {}
+WiFi5User::WiFi5User(int userId):WiFi4User(userId),hasChannelState(false) {}
 
 std::unique_ptr<Packet> WiFi5User::createPacket() {
-    return std::make_unique<Packet>(200, id, rand() % 100);
+    return std::make_unique<Packet>(200,id,rand()%100);
 }
 
 bool WiFi5User::canTransmit() {
     return hasChannelState;
 }
 
- void WiFi5User::setChannelState(bool state) {
-        hasChannelState = state;
-    }
+void WiFi5User::setChannelState(bool state) {
+    hasChannelState=state;
+}
 
-// WiFi5AccessPoint Implementation
-WiFi5AccessPoint::WiFi5AccessPoint(int apId) : AccessPoint(apId), PARALLEL_TIME(15.0) {}
+bool WiFi5User::isInBeamformedRange() {
+    return true;
+}
 
+std::unique_ptr<Packet> WiFi5User::createChannelStatePacket(int size) {
+    return std::make_unique<Packet>(size);
+}
+
+WiFi5AccessPoint::WiFi5AccessPoint(int apId):AccessPoint(apId),PARALLEL_TIME(PARALLEL_TIME_MS) {}
 
 void WiFi5AccessPoint::simulateTransmission() {
+    std::cout<<"Access Point broadcasting channel state packet...\n";
     std::vector<std::thread> userThreads;
+    Channel channel;
 
-    for (auto& user : users) {
-        userThreads.emplace_back([&, userPtr = user.get()]() {
-            if (userPtr->canTransmit()) {
-                auto startTime = std::chrono::high_resolution_clock::now(); // Start time
-                
-                // Simulate parallel transmissions with a realistic delay
+    for(auto& user:users) {
+        userThreads.emplace_back([&,userPtr=user.get()]() {
+            WiFi5User* wifi5User=dynamic_cast<WiFi5User*>(userPtr);
+            if(wifi5User) {
+                auto channelStatePacket=wifi5User->createChannelStatePacket(200);
                 {
                     std::lock_guard<std::mutex> lock(mutex);
-                    auto packet = userPtr->createPacket();
-                    transmittedPackets.push_back(std::move(packet));
-                }
-
-                auto endTime = std::chrono::high_resolution_clock::now(); // End time
-                std::chrono::duration<double, std::milli> elapsed = endTime - startTime;
-
-                // Simulate a constant parallel transmission time (e.g., 5ms for WiFi5)
-                double computedLatency = elapsed.count() + PARALLEL_TIME_MS;
-                {
-                    std::lock_guard<std::mutex> latencyLock(mutex);
-                    latencies.push_back(computedLatency);
+                    wifi5User->setTransmissionTime();
+                    transmittedPackets.push_back(std::move(channelStatePacket));
                 }
             }
         });
     }
 
-    for (auto& thread : userThreads) {
-        if (thread.joinable()) thread.join();
+    for(auto& thread:userThreads) {
+        if(thread.joinable()) thread.join();
     }
-}
 
-std::pair<double, double> WiFi5AccessPoint::computeLatency() {
-    std::lock_guard<std::mutex> lock(mutex);
-    if (latencies.empty()) return {0.0, 0.0};
+    userThreads.clear();
 
-    double totalLatency = std::accumulate(latencies.begin(), latencies.end(), 0.0);
-    double averageLatency = totalLatency / latencies.size();
-    double maxLatency = *std::max_element(latencies.begin(), latencies.end());
+    for(auto& user:users) {
+        userThreads.emplace_back([&,userPtr=user.get()]() {
+            WiFi5User* wifi5User=dynamic_cast<WiFi5User*>(userPtr);
+            if(wifi5User) {
+                double congestionFactor=std::min(0.05*users.size(),0.5);
+                while(true) {
+                    if(!channel.tryAcquire()) {
+                        wifi5User->setBackoffTime();
+                        std::this_thread::sleep_for(std::chrono::microseconds(1));
+                        continue;
+                    }
+                    auto packet=wifi5User->createPacket();
+                    {
+                        std::lock_guard<std::mutex> lock(mutex);
+                        wifi5User->setTransmissionTime();
+                        transmittedPackets.push_back(std::move(packet));
+                    }
+                    channel.release();
+                    break;
+                }
+            }
+        });
+    }
 
-    return {averageLatency, maxLatency};
+    for(auto& thread:userThreads) {
+        if(thread.joinable()) thread.join();
+    }
 }
 
 double WiFi5AccessPoint::computeThroughput() {
-    double totalDataBits = 0.0;
-    for (const auto& packet : transmittedPackets) {
-        totalDataBits += packet->getSize() * 8;
+    long double totalDataBits=0.0;
+    long double totalTime=0.0;
+
+    for(const auto& packet:transmittedPackets) {
+        totalDataBits+=(packet->getSize()*8);
     }
-    return totalDataBits / PARALLEL_TIME; // Throughput in bits/sec
+
+    double broadcastTimeMs=200.0;
+    double sequentialTimeMs=users.size()*15.0;
+    double parallelWindowTimeMs=PARALLEL_TIME_MS;
+
+    totalTime=broadcastTimeMs+sequentialTimeMs+parallelWindowTimeMs;
+    totalTime/=1000.0;
+
+    std::cout<<"Total data bits: "<<totalDataBits<<" bits\n";
+    std::cout<<"Total time (in seconds): "<<totalTime<<" seconds\n";
+
+    if(totalTime==0) {
+        return 0.0;
+    }
+
+    double throughputMbps=(totalDataBits/totalTime)/1000000;
+    return throughputMbps;
+}
+
+std::pair<double,double> WiFi5AccessPoint::computeLatency() {
+    std::lock_guard<std::mutex> lock(mutex);
+    double totalTransmissionTime=0.0;
+    double maxLatency=0.0;
+
+    double broadcastTimeMs=200.0;
+    double sequentialTimeMs=users.size()*15.0;
+    double parallelWindowTimeMs=PARALLEL_TIME_MS;
+
+    totalTransmissionTime+=(broadcastTimeMs+sequentialTimeMs+parallelWindowTimeMs)/1000.0;
+
+    for(auto& user:users) {
+        WiFi5User* wifi5User=dynamic_cast<WiFi5User*>(user.get());
+        if(wifi5User) {
+            double transmissionTime=wifi5User->getTransmissionTime();
+            totalTransmissionTime+=transmissionTime;
+            if(maxLatency<transmissionTime) {
+                maxLatency=transmissionTime;
+            }
+        }
+    }
+
+    double averageLatency=totalTransmissionTime/users.size();
+    return {averageLatency,maxLatency};
 }

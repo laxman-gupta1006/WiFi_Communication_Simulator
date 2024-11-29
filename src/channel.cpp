@@ -1,10 +1,5 @@
 #include "../include/channel.h"
-#include <iostream>
 #include <thread>
-#include <mutex>
-#include <numeric>
-#include <chrono>
-#include <iomanip>
 Channel::Channel() : busy(false) {}
 
 bool Channel::isBusy() const {

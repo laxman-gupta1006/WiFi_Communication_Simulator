@@ -15,8 +15,8 @@
 
 class WiFi4User : public User {
 private:
-    double backoffTime;
-    double TransmissionTime;
+    double backoffTime=0;
+    double TransmissionTime=0;
     const int MAX_BACKOFF;
 
 public:

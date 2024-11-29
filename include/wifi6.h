@@ -8,7 +8,6 @@
 #include "./wifi5.h"
 
 
-
 class WiFi6User : public WiFi5User {
 public:
     WiFi6User(int userId);

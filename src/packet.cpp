@@ -9,9 +9,7 @@
 #include <random>
 #include <algorithm>
 
-
-Packet::Packet(int packetSize, int src, int dest) 
-    : size(packetSize), sourceId(src), destinationId(dest) {
+Packet::Packet(int packetSize, int src, int dest) : size(packetSize), sourceId(src), destinationId(dest) {
     generateRandomData(size * 8);
 }
 
