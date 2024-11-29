@@ -1,8 +1,14 @@
 #include <iostream>
 #include <vector>
 #include <iomanip>
+#include <thread>
+#include <mutex>
+#include <numeric>
+#include <chrono>
+#include <iomanip>
 #include <memory>
 #include <type_traits>
+
 #include "../include/ap.h"
 #include "../include/packet.h"
 #include "../include/user.h"
@@ -18,53 +24,60 @@ struct Result {
     long double wifi4MaxLatency, wifi5MaxLatency, wifi6MaxLatency;
 };
 
-// Template function to run the simulation for a given WiFi type
-template <typename WiFiType>
-void runWiFiSimulation(int users, Result& result, std::string wifiName) {
-    int simulationIterations = 100;
-    try {
-        auto ap = std::make_unique<WiFiType>(1);
-        for (int i = 0; i < users; ++i) {
-            ap->addUser(std::make_unique<typename WiFiType::UserType>(i));
+// Template function for running WiFi technology simulation
+template <typename AccessPointType, typename UserType>
+void runTechnologySimulation(Result& result, int users, int simulationIterations) {
+    auto accessPoint = std::make_unique<AccessPointType>(1);
+    
+    // Add users
+    for (int i = 0; i < users; ++i) {
+        // Special handling for WiFi5 channel state
+        if constexpr (std::is_same_v<AccessPointType, WiFi5AccessPoint>) {
+            auto user = std::make_unique<UserType>(i);
+            user->setChannelState(true);
+            accessPoint->addUser(std::move(user));
+        } else {
+            accessPoint->addUser(std::make_unique<UserType>(i));
         }
-        for (int iter = 0; iter < simulationIterations; ++iter) {
-            ap->simulateTransmission();
-        }
-        
-        if (wifiName == "WiFi4") {
-            result.wifi4Throughput = ap->computeThroughput();
-            auto [avgLatency, maxLatency] = ap->computeLatency();
-            result.wifi4AvgLatency = avgLatency;
-            result.wifi4MaxLatency = maxLatency;
-        } else if (wifiName == "WiFi5") {
-            result.wifi5Throughput = ap->computeThroughput();
-            auto [avgLatency, maxLatency] = ap->computeLatency();
-            result.wifi5AvgLatency = avgLatency;
-            result.wifi5MaxLatency = maxLatency;
-        } else if (wifiName == "WiFi6") {
-            result.wifi6Throughput = ap->computeThroughput();
-            auto [avgLatency, maxLatency] = ap->computeLatency();
-            result.wifi6AvgLatency = avgLatency;
-            result.wifi6MaxLatency = maxLatency;
-        }
-    } catch (const std::exception& e) {
-        std::cerr << "Error during " << wifiName << " simulation: " << e.what() << std::endl;
+    }
+
+    // Run simulations
+    for (int iter = 0; iter < simulationIterations; ++iter) {
+        accessPoint->simulateTransmission();
+    }
+
+    // Compute metrics based on technology
+    if constexpr (std::is_same_v<AccessPointType, WiFi4AccessPoint>) {
+        result.wifi4Throughput = accessPoint->computeThroughput();
+        auto [avgLatency, maxLatency] = accessPoint->computeLatency();
+        result.wifi4AvgLatency = avgLatency;
+        result.wifi4MaxLatency = maxLatency;
+    } else if constexpr (std::is_same_v<AccessPointType, WiFi5AccessPoint>) {
+        result.wifi5Throughput = accessPoint->computeThroughput();
+        auto [avgLatency, maxLatency] = accessPoint->computeLatency();
+        result.wifi5AvgLatency = avgLatency;
+        result.wifi5MaxLatency = maxLatency;
+    } else if constexpr (std::is_same_v<AccessPointType, WiFi6AccessPoint>) {
+        result.wifi6Throughput = accessPoint->computeThroughput();
+        auto [avgLatency, maxLatency] = accessPoint->computeLatency();
+        result.wifi6AvgLatency = avgLatency;
+        result.wifi6MaxLatency = maxLatency;
     }
 }
 
-// Function to run the simulation for different WiFi types and store results
+// Function to run the simulation
 void runSimulation(std::vector<Result>& results) {
     int simulationIterations = 100;
     std::vector<int> userScenarios = {1, 10, 100};
 
     for (int users : userScenarios) {
         std::cout << "\n===== Simulation with " << users << " Users =====\n";
-        Result result = {users, 0, 0, 0, 0, 0, 0, 0, 0};
+        Result result = {users, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
-        // Run simulation for WiFi4, WiFi5, and WiFi6 using templates
-        runWiFiSimulation<WiFi4AccessPoint>(users, result, "WiFi4");
-        runWiFiSimulation<WiFi5AccessPoint>(users, result, "WiFi5");
-        runWiFiSimulation<WiFi6AccessPoint>(users, result, "WiFi6");
+        // Template-based simulation for WiFi technologies
+        runTechnologySimulation<WiFi4AccessPoint, WiFi4User>(result, users, simulationIterations);
+        runTechnologySimulation<WiFi5AccessPoint, WiFi5User>(result, users, simulationIterations);
+        runTechnologySimulation<WiFi6AccessPoint, WiFi6User>(result, users, simulationIterations);
 
         results.push_back(result);
     }
@@ -131,6 +144,7 @@ int main() {
                 break;
             default:
                 std::cout << "Invalid choice. Please try again.\n";
+                break;
         }
     } while (choice != 3);
 
