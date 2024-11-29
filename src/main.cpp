@@ -1,12 +1,8 @@
 #include <iostream>
 #include <vector>
 #include <iomanip>
-#include <thread>
-#include <mutex>
-#include <numeric>
-#include <chrono>
-#include <iomanip>
-
+#include <memory>
+#include <type_traits>
 #include "../include/ap.h"
 #include "../include/packet.h"
 #include "../include/user.h"
@@ -22,61 +18,53 @@ struct Result {
     long double wifi4MaxLatency, wifi5MaxLatency, wifi6MaxLatency;
 };
 
-// Function to run the simulation
+// Template function to run the simulation for a given WiFi type
+template <typename WiFiType>
+void runWiFiSimulation(int users, Result& result, std::string wifiName) {
+    int simulationIterations = 100;
+    try {
+        auto ap = std::make_unique<WiFiType>(1);
+        for (int i = 0; i < users; ++i) {
+            ap->addUser(std::make_unique<typename WiFiType::UserType>(i));
+        }
+        for (int iter = 0; iter < simulationIterations; ++iter) {
+            ap->simulateTransmission();
+        }
+        
+        if (wifiName == "WiFi4") {
+            result.wifi4Throughput = ap->computeThroughput();
+            auto [avgLatency, maxLatency] = ap->computeLatency();
+            result.wifi4AvgLatency = avgLatency;
+            result.wifi4MaxLatency = maxLatency;
+        } else if (wifiName == "WiFi5") {
+            result.wifi5Throughput = ap->computeThroughput();
+            auto [avgLatency, maxLatency] = ap->computeLatency();
+            result.wifi5AvgLatency = avgLatency;
+            result.wifi5MaxLatency = maxLatency;
+        } else if (wifiName == "WiFi6") {
+            result.wifi6Throughput = ap->computeThroughput();
+            auto [avgLatency, maxLatency] = ap->computeLatency();
+            result.wifi6AvgLatency = avgLatency;
+            result.wifi6MaxLatency = maxLatency;
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Error during " << wifiName << " simulation: " << e.what() << std::endl;
+    }
+}
+
+// Function to run the simulation for different WiFi types and store results
 void runSimulation(std::vector<Result>& results) {
     int simulationIterations = 100;
     std::vector<int> userScenarios = {1, 10, 100};
 
     for (int users : userScenarios) {
         std::cout << "\n===== Simulation with " << users << " Users =====\n";
-        Result result = {users, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+        Result result = {users, 0, 0, 0, 0, 0, 0, 0, 0};
 
-        // WiFi4 Simulation
-        {
-            auto wifi4AP = std::make_unique<WiFi4AccessPoint>(1);
-            for (int i = 0; i < users; ++i) {
-                wifi4AP->addUser(std::make_unique<WiFi4User>(i));
-            }
-            for (int iter = 0; iter < simulationIterations; ++iter) {
-                wifi4AP->simulateTransmission();
-            }
-            result.wifi4Throughput = wifi4AP->computeThroughput();
-            auto [avgLatency, maxLatency] = wifi4AP->computeLatency();
-            result.wifi4AvgLatency = avgLatency;
-            result.wifi4MaxLatency = maxLatency;
-        }
-
-        // WiFi5 Simulation
-        {
-            auto wifi5AP = std::make_unique<WiFi5AccessPoint>(1);
-            for (int i = 0; i < users; ++i) {
-                auto wifi5User = std::make_unique<WiFi5User>(i);
-                wifi5User->setChannelState(true);
-                wifi5AP->addUser(std::move(wifi5User));
-            }
-            for (int iter = 0; iter < simulationIterations; ++iter) {
-                wifi5AP->simulateTransmission();
-            }
-            result.wifi5Throughput = wifi5AP->computeThroughput();
-            auto [avgLatency, maxLatency] = wifi5AP->computeLatency();
-            result.wifi5AvgLatency = avgLatency;
-            result.wifi5MaxLatency = maxLatency;
-        }
-
-        // WiFi6 Simulation
-        {
-            auto wifi6AP = std::make_unique<WiFi6AccessPoint>(1);
-            for (int i = 0; i < users; ++i) {
-                wifi6AP->addUser(std::make_unique<WiFi6User>(i));
-            }
-            for (int iter = 0; iter < simulationIterations; ++iter) {
-                wifi6AP->simulateTransmission();
-            }
-            result.wifi6Throughput = wifi6AP->computeThroughput();
-            auto [avgLatency, maxLatency] = wifi6AP->computeLatency();
-            result.wifi6AvgLatency = avgLatency;
-            result.wifi6MaxLatency = maxLatency;
-        }
+        // Run simulation for WiFi4, WiFi5, and WiFi6 using templates
+        runWiFiSimulation<WiFi4AccessPoint>(users, result, "WiFi4");
+        runWiFiSimulation<WiFi5AccessPoint>(users, result, "WiFi5");
+        runWiFiSimulation<WiFi6AccessPoint>(users, result, "WiFi6");
 
         results.push_back(result);
     }
