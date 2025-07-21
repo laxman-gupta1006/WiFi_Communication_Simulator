@@ -8,22 +8,24 @@ private:
     int size;           
     int sourceId;
     int destinationId;
-    std::string data;
-
-    void generateRandomData(int bitLength);
+    double transmissionStartTime;
+    double transmissionEndTime;
+    double latency;
 
 public:
     Packet(int packetSize = 1024, int src = 0, int dest = 0);
 
     int getSize() const;
     int getSourceId() const;
-    std::string getData() const;
-
-    int countOnes() const;
-    int countZeros() const;
-    double getOneProbability() const;
+    int getDestinationId() const;
+    
+    // Calculate transmission time based on channel parameters
+    double calculateTransmissionTime(double bandwidth_mhz, int modulation_bits, double coding_rate) const;
+    
+    void setTransmissionTime(double start, double end);
+    double getLatency() const;
+    double getTransmissionStartTime() const;
+    double getTransmissionEndTime() const;
 };
 
-
-
-#endif // WIFI_SIMULATION_H
+#endif

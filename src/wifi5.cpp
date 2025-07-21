@@ -1,182 +1,100 @@
-#include"../include/wifi5.h"
-#include<numeric>
-#include<thread>
-#include<vector>
-#include<iostream>
-#include<chrono>
-#include<mutex>
-#include<algorithm>
-#include"../include/channel.h"
+#include "../include/wifi5.h"
+#include <thread>
+#include <chrono>
 
-constexpr double PARALLEL_TIME_MS=15.0;
-constexpr double CSI_PACKET_SIZE_BYTES=200.0;
-
-WiFi5User::WiFi5User(int userId):WiFi4User(userId),hasChannelState(false) {}
+WiFi5User::WiFi5User(int userId) : WiFi4User(userId), hasChannelState(false) {}
 
 std::unique_ptr<Packet> WiFi5User::createPacket() {
-    try {
-        return std::make_unique<Packet>(200,id,rand()%100);
-    } catch(const std::exception& e) {
-        throw std::runtime_error("Error creating packet: "+std::string(e.what()));
-    }
+    return std::make_unique<Packet>(1024, id, 0); // 1KB data packet
 }
 
 bool WiFi5User::canTransmit() {
-    try {
-        return hasChannelState;
-    } catch(const std::exception& e) {
-        throw std::runtime_error("Error checking transmit capability: "+std::string(e.what()));
-    }
+    return hasChannelState;
 }
 
 void WiFi5User::setChannelState(bool state) {
-    try {
-        hasChannelState=state;
-    } catch(const std::exception& e) {
-        throw std::runtime_error("Error setting channel state: "+std::string(e.what()));
-    }
+    hasChannelState = state;
 }
 
 bool WiFi5User::isInBeamformedRange() {
-    try {
-        return true;
-    } catch(const std::exception& e) {
-        throw std::runtime_error("Error checking beamformed range: "+std::string(e.what()));
-    }
+    return true; // Assume all users are in range
 }
 
 std::unique_ptr<Packet> WiFi5User::createChannelStatePacket(int size) {
-    try {
-        return std::make_unique<Packet>(size);
-    } catch(const std::exception& e) {
-        throw std::runtime_error("Error creating channel state packet: "+std::string(e.what()));
-    }
+    return std::make_unique<Packet>(size, id, 0);
 }
 
-WiFi5AccessPoint::WiFi5AccessPoint(int apId):AccessPoint(apId),PARALLEL_TIME(PARALLEL_TIME_MS) {}
+WiFi5AccessPoint::WiFi5AccessPoint(int apId) 
+    : AccessPoint(apId), PARALLEL_TIME(15.0) {}
 
 void WiFi5AccessPoint::simulateTransmission() {
-    try {
-        std::cout<<"Access Point broadcasting channel state packet...\n";
-        std::vector<std::thread> userThreads;
-        Channel channel;
-
-        for(auto& user:users) {
-            userThreads.emplace_back([&,userPtr=user.get()]() {
-                try {
-                    WiFi5User* wifi5User=dynamic_cast<WiFi5User*>(userPtr);
-                    if(wifi5User) {
-                        auto channelStatePacket=wifi5User->createChannelStatePacket(200);
-                        {
-                            std::lock_guard<std::mutex> lock(mutex);
-                            wifi5User->setTransmissionTime();
-                            transmittedPackets.push_back(std::move(channelStatePacket));
-                        }
-                    }
-                } catch(const std::exception& e) {
-                    throw std::runtime_error("Error simulating transmission for user: "+std::string(e.what()));
-                }
-            });
+    double currentTime = 0.0;
+    const double SIMULATION_TIME = 1000.0; // 1 second
+    
+    // Convert users to WiFi5Users
+    std::vector<WiFi5User*> wifi5Users;
+    for (auto& user : users) {
+        if (auto wifi5User = dynamic_cast<WiFi5User*>(user.get())) {
+            wifi5Users.push_back(wifi5User);
         }
-
-        for(auto& thread:userThreads) {
-            if(thread.joinable()) thread.join();
+    }
+    
+    while (currentTime < SIMULATION_TIME) {
+        // Step 1: AP broadcasts packet
+        auto broadcastPacket = std::make_unique<Packet>(1024, 0, -1); // Broadcast
+        double broadcastTime = broadcastPacket->calculateTransmissionTime(20.0, 8, 5.0/6.0);
+        broadcastPacket->setTransmissionTime(currentTime, currentTime + broadcastTime);
+        transmittedPackets.push_back(std::move(broadcastPacket));
+        currentTime += broadcastTime;
+        
+        // Step 2: Sequential channel state information
+        for ( auto user : wifi5Users) {
+            auto csiPacket = user->createChannelStatePacket(200); // 200 bytes CSI
+            double csiTime = csiPacket->calculateTransmissionTime(20.0, 8, 5.0/6.0);
+            csiPacket->setTransmissionTime(currentTime, currentTime + csiTime);
+            transmittedPackets.push_back(std::move(csiPacket));
+            user->setChannelState(true);
+            currentTime += csiTime;
         }
-
-        userThreads.clear();
-
-        for(auto& user:users) {
-            userThreads.emplace_back([&,userPtr=user.get()]() {
-                try {
-                    WiFi5User* wifi5User=dynamic_cast<WiFi5User*>(userPtr);
-                    if(wifi5User) {
-                        double congestionFactor=std::min(0.05*users.size(),0.5);
-                        while(true) {
-                            if(!channel.tryAcquire()) {
-                                wifi5User->setBackoffTime();
-                                std::this_thread::sleep_for(std::chrono::microseconds(1));
-                                continue;
-                            }
-                            auto packet=wifi5User->createPacket();
-                            {
-                                std::lock_guard<std::mutex> lock(mutex);
-                                wifi5User->setTransmissionTime();
-                                transmittedPackets.push_back(std::move(packet));
-                            }
-                            channel.release();
-                            break;
-                        }
-                    }
-                } catch(const std::exception& e) {
-                    throw std::runtime_error("Error simulating transmission for user: "+std::string(e.what()));
-                }
-            });
+        
+        // Step 3: Parallel transmission for 15ms
+        double parallelStart = currentTime;
+        for ( auto user : wifi5Users) {
+            if (user->canTransmit()) {
+                auto dataPacket = user->createPacket();
+                dataPacket->setTransmissionTime(parallelStart, parallelStart + PARALLEL_TIME);
+                user->addTransmittedPacket(*dataPacket);
+                transmittedPackets.push_back(std::move(dataPacket));
+            }
         }
-
-        for(auto& thread:userThreads) {
-            if(thread.joinable()) thread.join();
+        currentTime += PARALLEL_TIME;
+        
+        // Reset channel state for next cycle
+        for ( auto user : wifi5Users) {
+            user->setChannelState(false);
         }
-    } catch(const std::exception& e) {
-        throw std::runtime_error("Error in simulateTransmission: "+std::string(e.what()));
     }
 }
 
 double WiFi5AccessPoint::computeThroughput() {
-    try {
-        long double totalDataBits=0.0;
-        long double totalTime=0.0;
-
-        for(const auto& packet:transmittedPackets) {
-            totalDataBits+=(packet->getSize()*8);
-        }
-
-        double broadcastTimeMs=200.0;
-        double sequentialTimeMs=users.size()*15.0;
-        double parallelWindowTimeMs=PARALLEL_TIME_MS;
-
-        totalTime=broadcastTimeMs+sequentialTimeMs+parallelWindowTimeMs;
-        totalTime/=1000.0;
-
-        std::cout<<"Total data bits: "<<totalDataBits<<" bits\n";
-        std::cout<<"Total time (in seconds): "<<totalTime<<" seconds\n";
-
-        if(totalTime==0) {
-            return 0.0;
-        }
-
-        double throughputMbps=(totalDataBits/totalTime)/1000000;
-        return throughputMbps;
-    } catch(const std::exception& e) {
-        throw std::runtime_error("Error computing throughput: "+std::string(e.what()));
+    double totalBits = 0.0;
+    for (const auto& packet : transmittedPackets) {
+        totalBits += packet->getSize() * 8;
     }
+    return totalBits / 1000000.0; // Mbps (assuming 1 second simulation)
 }
 
-std::pair<double,double> WiFi5AccessPoint::computeLatency() {
-    try {
-        std::lock_guard<std::mutex> lock(mutex);
-        double totalTransmissionTime=0.0;
-        double maxLatency=0.0;
-
-        double broadcastTimeMs=200.0;
-        double sequentialTimeMs=users.size()*15.0;
-        double parallelWindowTimeMs=PARALLEL_TIME_MS;
-
-        totalTransmissionTime+=(broadcastTimeMs+sequentialTimeMs+parallelWindowTimeMs)/1000.0;
-
-        for(auto& user:users) {
-            WiFi5User* wifi5User=dynamic_cast<WiFi5User*>(user.get());
-            if(wifi5User) {
-                double transmissionTime=wifi5User->getTransmissionTime();
-                totalTransmissionTime+=transmissionTime;
-                if(maxLatency<transmissionTime) {
-                    maxLatency=transmissionTime;
-                }
-            }
-        }
-
-        double averageLatency=totalTransmissionTime/users.size();
-        return {averageLatency,maxLatency};
-    } catch(const std::exception& e) {
-        throw std::runtime_error("Error computing latency: "+std::string(e.what()));
+std::pair<double, double> WiFi5AccessPoint::computeLatency() {
+    if (transmittedPackets.empty()) return {0.0, 0.0};
+    
+    double totalLatency = 0.0;
+    double maxLatency = 0.0;
+    
+    for (const auto& packet : transmittedPackets) {
+        double latency = packet->getLatency();
+        totalLatency += latency;
+        maxLatency = std::max(maxLatency, latency);
     }
+    
+    return {totalLatency / transmittedPackets.size(), maxLatency};
 }
